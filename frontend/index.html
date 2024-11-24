@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ChatGPT-Like UI</title>
+<style>
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f9f9f9;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+header {
+    background-color: #202123;
+    color: #fff;
+    padding: 10px 20px;
+    text-align: center;
+    font-size: 1.5em;
+}
+
+#chat-container {
+    flex-grow: 1;
+    padding: 20px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}
+
+.chat-bubble {
+    margin: 10px 0;
+    max-width: 80%;
+    padding: 10px 15px;
+    border-radius: 10px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+}
+
+.user-bubble {
+    align-self: flex-end;
+    background-color: #0078d7;
+    color: #fff;
+}
+
+.bot-bubble {
+    align-self: flex-start;
+    background-color: #e5e5e5;
+    color: #000;
+}
+
+footer {
+    background-color: #fff;
+    padding: 10px;
+    border-top: 1px solid #ddd;
+    display: flex;
+    flex-direction: column;
+}
+
+textarea {
+    resize: none;
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 10px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+}
+
+input[type="file"] {
+    margin-bottom: 10px;
+}
+
+button {
+    padding: 10px 20px;
+    background-color: #0078d7;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+button:hover {
+    background-color: #005bb5;
+}
+</style>
+<script async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+</head>
+<body>
+<header>ChatGPT-Like Interface</header>
+<div id="chat-container"></div>
+<footer>
+<textarea id="user-input" placeholder="Type your message..."></textarea>
+<input type="file" id="file-selector">
+<button onclick="sendMessage()">Send</button>
+</footer>
+
+<script>
+const chatContainer = document.getElementById("chat-container");
+const userInput = document.getElementById("user-input");
+const fileSelector = document.getElementById("file-selector");
+
+// Load chat history from localStorage
+const chatHistory = JSON.parse(localStorage.getItem("chatHistory")) || [];
+chatHistory.forEach(chat => addMessage(chat.message, chat.type));
+
+function addMessage(message, type) {
+    const bubble = document.createElement("div");
+    bubble.className = `chat-bubble ${type}-bubble`;
+
+    // Add the raw message content
+    bubble.textContent = message;
+    chatContainer.appendChild(bubble);
+
+    // Render LaTeX for bot messages
+    if (type === "bot") {
+        bubble.innerHTML = message;
+        MathJax.typesetPromise([bubble]); // Render LaTeX
+    }
+
+    chatContainer.scrollTop = chatContainer.scrollHeight; // Scroll to bottom
+}
+
+async function sendMessage() {
+    const instruction = userInput.value.trim();
+    if (!instruction) return;
+
+    let fileContent = "";
+    if (fileSelector.files.length > 0) {
+        const file = fileSelector.files[0];
+        fileContent = await file.text(); // Read file content
+    }
+
+    // Add user's message to chat
+    addMessage(instruction, "user");
+    chatHistory.push({ message: instruction, type: "user" });
+    localStorage.setItem("chatHistory", JSON.stringify(chatHistory));
+
+    // Send to backend
+    const payload = {
+        instruction: instruction,
+        file_content: fileContent
+    };
+
+    addMessage("Processing...", "bot"); // Temporary bot response
+    const tempBotBubble = chatContainer.lastChild;
+
+    try {
+        const response = await fetch("/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+        const botMessage = data.response || "Something went wrong.";
+
+        // Update chat
+        tempBotBubble.textContent = botMessage;
+        MathJax.typesetPromise([tempBotBubble]); // Render LaTeX for final response
+        chatHistory.push({ message: botMessage, type: "bot" });
+        localStorage.setItem("chatHistory", JSON.stringify(chatHistory));
+    } catch (error) {
+        tempBotBubble.textContent = "Error: Unable to process your request.";
+        console.error("Error communicating with backend:", error);
+    }
+
+    userInput.value = ""; // Clear input field
+    fileSelector.value = ""; // Reset file selector
+}
+</script>
+</body>
+</html>
